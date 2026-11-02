@@ -1,0 +1,195 @@
+---
+- hosts: all
+  become: true
+  vars:
+    new_user: VPS-USER
+    ssh_public_key: "{{ lookup('file', 'PATH-TO-SSH-PRIVATE-KEY') }}"
+    domain_name: YOUR-ROOT-DOMAIN
+    admin_email: YOUR-EMAIL
+    cloudflare_ips:
+      - "LIST-OF-CLOUDFLARE-IP-RANGES" #Check from here https://www.cloudflare.com/ips-v4
+    new_user_password_hash: "" # put result from running `openssl passwd -6` here
+
+  tasks:
+    - name: Ensure the secure sudo user exists with a hashed password
+      ansible.builtin.user:
+        name: "{{ new_user }}"
+        shell: /bin/bash
+        groups: sudo
+        append: yes
+        password: "{{ new_user_password_hash }}"
+        state: present
+
+    - name: Enforce password validation via visudo / sudoers configuration
+      ansible.builtin.lineinfile:
+        path: "/etc/sudoers.d/{{ new_user }}"
+        line: "{{ new_user }} ALL=(ALL:ALL) ALL"
+        create: yes
+        mode: '0440'
+        validate: 'visudo -cf %s'
+
+    - name: Set up .ssh directory for the new user
+      file:
+        path: "/home/{{ new_user }}/.ssh"
+        state: directory
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: '0700'
+
+    - name: Add local public SSH key to the new user
+      authorized_key:
+        user: "{{ new_user }}"
+        key: "{{ ssh_public_key }}"
+        state: present
+
+    - name: Update apt cache and upgrade packages
+      apt:
+        update_cache: yes
+        upgrade: safe
+
+    - name: Install security tools
+      apt:
+        name:
+          - ufw
+          - fail2ban
+        state: present
+
+    - name: Disable root login and password authentication in SSH
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "{{ item.regexp }}"
+        line: "{{ item.line }}"
+      loop:
+        - { regexp: '^#?PermitRootLogin', line: 'PermitRootLogin no' }
+        - { regexp: '^#?PasswordAuthentication', line: 'PasswordAuthentication no' }
+        - { regexp: '^#?PubkeyAuthentication', line: 'PubkeyAuthentication yes' }
+        - { regexp: '^#?KbdInteractiveAuthentication', line: 'KbdInteractiveAuthentication no' }
+        - { regexp: '^#?ChallengeResponseAuthentication', line: 'ChallengeResponseAuthentication no' }
+      notify: Restart SSH
+
+    - name: Locate all drop-in configuration files in sshd_config.d
+      find:
+        paths: /etc/ssh/sshd_config.d
+        patterns: "*.conf"
+      register: sshd_dropins
+
+    - name: Disable password authentication in all discovered drop-in files
+      lineinfile:
+        path: "{{ item.0.path }}"
+        regexp: "{{ item.1.regexp }}"
+        line: "{{ item.1.line }}"
+        state: present
+      loop: "{{ sshd_dropins.files | product([
+          {'regexp': '^#?PasswordAuthentication', 'line': 'PasswordAuthentication no'},
+          {'regexp': '^#?KbdInteractiveAuthentication', 'line': 'KbdInteractiveAuthentication no'},
+          {'regexp': '^#?ChallengeResponseAuthentication', 'line': 'ChallengeResponseAuthentication no'}
+        ]) | list }}"
+      notify: Restart SSH
+
+    - name: Enable and configure UFW firewall
+      ufw:
+        state: enabled
+        policy: deny
+        direction: incoming
+
+    - name: Allow SSH, HTTP, and HTTPS through UFW
+      ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop:
+        - '22'
+        - '80'
+        - '443'
+
+    - name: Start and enable Fail2ban
+      service:
+        name: fail2ban
+        state: started
+        enabled: yes
+
+    - name: Update apt cache and install Nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+        update_cache: yes
+      register: nginx_install
+
+    - name: Ensure Nginx service is started and enabled
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: yes
+      register: nginx_service
+
+    - name: Verify Nginx is active and running
+      ansible.builtin.assert:
+        that:
+          - nginx_service.status.ActiveState == "active"
+        fail_msg: "Nginx failed to start properly."
+        success_msg: "Nginx is successfully installed and running."
+
+    - name: Update apt cache and install Certbot
+      apt:
+        name:
+          - certbot
+          - python3-certbot-nginx
+        update_cache: yes
+        state: present
+
+    - name: Ensure Nginx is running and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+    - name: Obtain Let's Encrypt SSL certificate
+      command: >
+        certbot --nginx -d {{ domain_name }} -d www.{{ domain_name }}
+        --non-interactive --agree-tos -m {{ admin_email }} --redirect
+      args:
+        creates: "/etc/letsencrypt/live/{{ domain_name }}/fullchain.pem"
+
+    - name: Reset UFW to a clean baseline state
+      ufw:
+        state: reset
+
+    - name: Set default UFW policies (Deny incoming, allow outgoing)
+      ufw:
+        direction: "{{ item.direction }}"
+        policy: "{{ item.policy }}"
+      loop:
+        - { direction: 'incoming', policy: 'deny' }
+        - { direction: 'outgoing', policy: 'allow' }
+
+    - name: Allow SSH access (prevent lockout)
+      ufw:
+        rule: allow
+        port: '22'
+        proto: tcp
+
+    - name: Allow HTTP (port 80) exclusively from Cloudflare IP ranges
+      ufw:
+        rule: allow
+        src: "{{ item }}"
+        port: '80'
+        proto: tcp
+      loop: "{{ cloudflare_ips }}"
+
+    - name: Allow HTTPS (port 443) exclusively from Cloudflare IP ranges
+      ufw:
+        rule: allow
+        src: "{{ item }}"
+        port: '443'
+        proto: tcp
+      loop: "{{ cloudflare_ips }}"
+
+    - name: Enable UFW firewall
+      ufw:
+        state: enabled
+
+  handlers:
+    - name: Restart SSH
+      service:
+        name: ssh
+        state: restarted
