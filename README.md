@@ -10,15 +10,15 @@ In Cloudflare, you need to add your domain so it points to your VPS.
 
 1. Add your domain in Cloudflare Dashboard.
 2. Add A and CNAME record in DNS settings.
-    1. A record
-        Type: A
-        Name: @
-        IPv4 addres: Your VPS IP address
-        Make sure proxy status is enabled
-    2. CNAME record
-        Type: CNAME
-        Name: www
-        Target: Your root domain
+    1. A record  
+        Type: A  
+        Name: @  
+        IPv4 addres: Your VPS IP address  
+        Make sure proxy status is enabled  
+    2. CNAME record  
+        Type: CNAME  
+        Name: www  
+        Target: Your root domain  
         Make sure proxy status is enabled
 3. Change nameservers in your domain registrar to Cloudflare nameservers.
 

@@ -188,8 +188,62 @@
       ufw:
         state: enabled
 
+    - name: Ensure web directory exists for domain
+      ansible.builtin.file:
+        path: "/var/www/{{ domain_name }}/html"
+        state: directory
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: '0755'
+
+    - name: Copy index.html to website web root
+      ansible.builtin.copy:
+        dest: "/var/www/{{ domain_name }}/html/index.html"
+        owner: "{{ new_user }}"
+        group: "{{ new_user }}"
+        mode: '0644'
+        content: |
+          <!DOCTYPE html>
+          <html lang="en">
+          <head>
+              <meta charset="UTF-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1.0">
+              <title>My Portfolio</title>
+          </head>
+          <body>
+              <h1>Welcome to My Personal Website</h1>
+              <p>Site is running under Nginx & Cloudflare SSL.</p>
+          </body>
+          </html>
+
+    - name: Deploy updated Nginx server block configuration
+      ansible.builtin.template:
+        src: templates/nginx_site.j2
+        dest: "/etc/nginx/sites-available/{{ domain_name }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Reload Nginx
+
+    - name: Ensure site configuration is enabled
+      ansible.builtin.file:
+        src: "/etc/nginx/sites-available/{{ domain_name }}"
+        dest: "/etc/nginx/sites-enabled/{{ domain_name }}"
+        state: link
+
+    - name: Verify Nginx configuration syntax
+      ansible.builtin.command: nginx -t
+      register: nginx_test
+      changed_when: false
+
   handlers:
     - name: Restart SSH
       service:
         name: ssh
         state: restarted
+
+    - name: Reload Nginx
+      ansible.builtin.systemd:
+        name: nginx
+        state: reloaded
+      become: true
