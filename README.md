@@ -37,7 +37,12 @@ python3 -m pip install ansible
 ssh-keygen -f '/path/to/known_hosts/file' -R 'your_vps_public_ip_address'
 ```
 
-3. Run initial setup 
+3. Generate VPS user password and replace `new_user_password_hash` variable in `playbook.yml` with the generated hash.
+```bash
+openssl passwd -6
+```
+
+4. Run initial setup 
 
 If your initial VPS user use password, you need to install `sshpass`.
 ```bash
@@ -55,12 +60,12 @@ If using password. Enter your initial VPS user password.
 ansible-playbook -i setup-with-password.ini playbook.yml --ask-pass
 ```
 
-4. After this first run, you cannot access VPS using the initial user anymore so you need to change the Ansible inventory file. Enter your VPS user password.
+5. After this first run, you cannot access VPS using the initial user anymore so you need to change the Ansible inventory file. Enter your VPS user password.
 ```bash
 ansible-playbook -i inventory.ini playbook.yml --ask-become-pass
 ```
 
-5. To check if your traffic route through Cloudflare, run this `curl` command.
+6. To check if your traffic route through Cloudflare, run this `curl` command.
 ```bash
 curl -I yourdomain.com
 ```
