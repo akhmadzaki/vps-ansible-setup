@@ -1,15 +1,15 @@
 # VPS Ansible Setup
 
 This repo setup your personal VPS using Ansible with several server hardening applied. This Ansible playbook assumes you are running on Debian-based Linux OS, e.g. Ubuntu. Before running any of the steps below, modify these variables inside ansible.cfg file, .ini files, and playbook.yml file.
-1. VPS-USER, your desired VPS username.
-2. VPS-INITIAL-USER, your initial VPS user from cloud provider, could be root or anything else.
-3. PATH-TO-INITIAL-SSH-PRIVATE-KEY, path to initial VPS user if using private key.
-4. PATH-TO-SSH-PRIVATE-KEY, path to desired VPS user private key, ideally different from initial user's one.
-5. VPS-PUBLIC-IP-ADDRESS, your VPS public IP address.
-6. YOUR-DOMAIN, your personal domain, e.g. mydomain.com.
-7. YOUR-EMAIL, your personal email for Cerbot notification.
-8. LIST-OF-CLOUDFLARE-IP-RANGES, list of Cloudflare IP ranges. Check here https://www.cloudflare.com/ips-v4.
-9. USER-PASSWORD-HASH, hash of your VPS password. Run this in terminal and copy the output.
+1. `VPS-USER`, your desired VPS username.
+2. `VPS-INITIAL-USER`, your initial VPS user from cloud provider, could be root or anything else.
+3. `PATH-TO-INITIAL-SSH-PRIVATE-KEY`, path to initial VPS user if using private key.
+4. `PATH-TO-SSH-PRIVATE-KEY`, path to desired VPS user private key, ideally different from initial user's one.
+5. `VPS-PUBLIC-IP-ADDRESS`, your VPS public IP address.
+6. `YOUR-DOMAIN`, your personal domain, e.g. mydomain.com.
+7. `YOUR-EMAIL`, your personal email for Cerbot notification.
+8. `LIST-OF-CLOUDFLARE-IP-RANGES`, list of Cloudflare IP ranges. Check here https://www.cloudflare.com/ips-v4.
+9. `USER-PASSWORD-HASH`, hash of your VPS password. Run this in terminal and copy the output.
 ```bash
 openssl passwd -6
 ```
