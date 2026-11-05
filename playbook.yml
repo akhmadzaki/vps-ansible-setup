@@ -4,11 +4,11 @@
   vars:
     new_user: VPS-USER
     ssh_public_key: "{{ lookup('file', 'PATH-TO-SSH-PRIVATE-KEY') }}"
-    domain_name: YOUR-ROOT-DOMAIN
+    domain_name: YOUR-DOMAIN
     admin_email: YOUR-EMAIL
     cloudflare_ips:
-      - "LIST-OF-CLOUDFLARE-IP-RANGES" #Check from here https://www.cloudflare.com/ips-v4
-    new_user_password_hash: "" # put result from running `openssl passwd -6` here
+      - "LIST-OF-CLOUDFLARE-IP-RANGES"
+    new_user_password_hash: USER-PASSWORD-HASH # put result from running `openssl passwd -6` here
 
   tasks:
     - name: Ensure the secure sudo user exists with a hashed password
@@ -46,6 +46,25 @@
       apt:
         update_cache: yes
         upgrade: safe
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install unattended-upgrades package
+      apt:
+        name: unattended-upgrades
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Ensure unattended-upgrades is enabled and configured for automatic security updates
+      copy:
+        dest: /etc/apt/apt.conf.d/20auto-upgrades
+        content: |
+          APT::Periodic::Update-Package-Lists "1";
+          APT::Periodic::Unattended-Upgrade "1";
+        owner: root
+        group: root
+        mode: '0644'
+      when: ansible_os_family == "Debian"
 
     - name: Install security tools
       apt:
@@ -129,6 +148,22 @@
         fail_msg: "Nginx failed to start properly."
         success_msg: "Nginx is successfully installed and running."
 
+    - name: Remove default Nginx HTML directory
+      file:
+        path: /var/www/html
+        state: absent
+
+    - name: Remove default site symlink in sites-enabled
+      file:
+        path: /etc/nginx/sites-enabled/default
+        state: absent
+
+    - name: Remove default site configuration in sites-available
+      file:
+        path: /etc/nginx/sites-available/default
+        state: absent
+      notify: Reload Nginx
+
     - name: Update apt cache and install Certbot
       apt:
         name:
@@ -196,25 +231,13 @@
         group: "{{ new_user }}"
         mode: '0755'
 
-    - name: Copy index.html to website web root
+    - name: Copy public folder to website web root
       ansible.builtin.copy:
-        dest: "/var/www/{{ domain_name }}/html/index.html"
+        dest: "/var/www/{{ domain_name }}/html/"
         owner: "{{ new_user }}"
         group: "{{ new_user }}"
         mode: '0644'
-        content: |
-          <!DOCTYPE html>
-          <html lang="en">
-          <head>
-              <meta charset="UTF-8">
-              <meta name="viewport" content="width=device-width, initial-scale=1.0">
-              <title>My Portfolio</title>
-          </head>
-          <body>
-              <h1>Welcome to My Personal Website</h1>
-              <p>Site is running under Nginx & Cloudflare SSL.</p>
-          </body>
-          </html>
+        src: public/
 
     - name: Deploy updated Nginx server block configuration
       ansible.builtin.template:

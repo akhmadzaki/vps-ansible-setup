@@ -1,24 +1,41 @@
 server {
-    listen 80;
-    listen [::]:80;
-    server_name {{ domain_name }} www.{{ domain_name }};
-    return 301 https://$host$request_uri;
-}
-
-server {
-    listen 443 ssl http2;
-    listen [::]:443 ssl http2;
+    listen 443 ssl;
     server_name {{ domain_name }} www.{{ domain_name }};
 
     root /var/www/{{ domain_name }}/html;
-    index index.html;
+    index index.html index.htm;
 
-    location / {
-        try_files $uri $uri/ =404;
-    }
+    autoindex off;
 
     ssl_certificate /etc/letsencrypt/live/{{ domain_name }}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/{{ domain_name }}/privkey.pem;
     include /etc/letsencrypt/options-ssl-nginx.conf;
     ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+    # Map all common 4xx and 5xx status codes to your custom error file
+    error_page 400 401 403 404 405 408 410 429 500 502 503 504 /custom-404.html;
+
+    # Secure internal location block for the error page
+    location = /custom-404.html {
+        internal;
+    }
+
+    # Optional: Prevent logging missing favicon requests
+    location = /favicon.ico {
+        log_not_found off;
+        access_log off;
+    }
+}
+
+
+server {
+    listen 80;
+    server_name {{ domain_name }} www.{{ domain_name }};
+
+    # Redirect all HTTP requests to their secure HTTPS equivalent preserving URI
+    return 301 https://$host$request_uri;
 }
